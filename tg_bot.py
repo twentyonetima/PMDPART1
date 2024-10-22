@@ -3,7 +3,6 @@ import logging
 import sys
 import os
 import json
-from turtledemo.penrose import start
 
 import aiofiles
 from datetime import datetime
