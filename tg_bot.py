@@ -27,6 +27,7 @@ winner_1_id = int(os.getenv('WINNER_1'))
 winner_2_id = int(os.getenv('WINNER_2'))
 winner_3_id = int(os.getenv('WINNER_3'))
 winner_4_id = int(os.getenv('WINNER_4'))
+winner_all_id = int(os.getenv('PROMIC_FOR_ALL'))
 syka_id = int(os.getenv('SYKA_VIDEO_ID'))
 xuy_id = int(os.getenv('PENIS_VIDEO_ID'))
 pizda_id = int(os.getenv('PENIS_VIDEO_ID'))
@@ -113,6 +114,7 @@ async def rebus_func(message, user_id):
         else:
             rebus_user_list.append(user_id)
             await save_rebus_users_to_file(rebus_user_list)
+            await bot.copy_message(chat_id=chat_id_to_forward_to, from_chat_id=from_chat_id, message_id=winner_all_id)
             await bot.copy_message(chat_id=chat_id_to_forward_to, from_chat_id=from_chat_id, message_id=audio_id)
     else:
         await message.answer('попробуй еще раз')
