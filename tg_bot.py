@@ -11,7 +11,8 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram import types
 
 load_dotenv()
 TOKEN = os.getenv('BOT_TOKEN')
@@ -36,6 +37,8 @@ listening_album_id = int(os.getenv('LISTENING_ID'))
 USER_FILE = "start_users.json"
 REBUS_FILE = "rebus_users.json"
 FITOK_FILE = "fitok_users.json"
+COMING_FILE = "coming.json"
+NOT_COMING_FILE = "not_coming.json"
 
 rebus_user_list = []
 fitok_user_list = []
@@ -53,6 +56,39 @@ async def save_fitok_users_to_file(users):
     async with aiofiles.open(FITOK_FILE, 'w') as f:
         await f.write(json.dumps(list(users)))
 
+async def save_coming_users_to_file(users):
+    async with aiofiles.open(COMING_FILE, 'w') as f:
+        await f.write(json.dumps(list(users)))
+
+async def save_not_coming_users_to_file(users):
+    async with aiofiles.open(NOT_COMING_FILE, 'w') as f:
+        await f.write(json.dumps(list(users)))
+
+async def load_coming_users_from_file():
+    if os.path.exists(COMING_FILE):
+        async with aiofiles.open(COMING_FILE, 'r') as f:
+            contents = await f.read()
+            if contents.strip():
+                try:
+                    return set(json.loads(contents))
+                except json.JSONDecodeError:
+                    return set()
+            else:
+                return set()
+    return set()
+
+async def load_not_coming_users_from_file():
+    if os.path.exists(NOT_COMING_FILE):
+        async with aiofiles.open(NOT_COMING_FILE, 'r') as f:
+            contents = await f.read()
+            if contents.strip():
+                try:
+                    return set(json.loads(contents))
+                except json.JSONDecodeError:
+                    return set()
+            else:
+                return set()
+    return set()
 
 async def load_users_from_file():
     if os.path.exists(USER_FILE):
@@ -167,15 +203,45 @@ async def echo_handler(message: Message) -> None:
     else:
         await message.answer("попробуй еще раз")
 
+async def callback_handler(call: types.CallbackQuery):
+    user_id = call.from_user.id
+
+    if call.data == "coming":
+        await call.message.answer("Отлично! Ждем тебя)")
+        coming_users = await load_coming_users_from_file()
+        coming_users.add(user_id)
+        await save_coming_users_to_file(coming_users)
+
+    elif call.data == "not_coming":
+        await call.message.answer("Жаль, может быть в следующий раз)")
+        not_coming_users = await load_not_coming_users_from_file()
+        not_coming_users.add(user_id)
+        await save_not_coming_users_to_file(not_coming_users)
+
+    await call.message.delete()
+
+    await call.answer()
+
+
+dp.callback_query.register(callback_handler, lambda call: call.data in ["coming", "not_coming"])
+
+
 async def present_album_notification(bot: Bot):
     target_time = convert(listening_album_date)
 
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Да", callback_data="coming"),
+            InlineKeyboardButton(text="Нет", callback_data="not_coming")
+        ]
+    ])
     while True:
         now = datetime.now()
         if now >= target_time:
             for user_id in start_users:
                 try:
                     await bot.copy_message(chat_id=user_id, from_chat_id=from_chat_id, message_id=listening_album_id)
+                    await bot.send_message(chat_id=user_id, text="Придешь?", reply_markup=keyboard)
                 except Exception as e:
                     logging.error(f"Failed to send message to {user_id}: {e}")
             break
@@ -197,8 +263,11 @@ async def album_notification(bot: Bot):
 
 
 async def main() -> None:
-    global start_users
+    global start_users, coming_users, not_coming_users
+
     start_users = await load_users_from_file()
+    coming_users = await load_coming_users_from_file()
+    not_coming_users = await load_not_coming_users_from_file()
 
     asyncio.create_task(present_album_notification(bot))
     asyncio.create_task(album_notification(bot))
