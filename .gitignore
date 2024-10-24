@@ -2,5 +2,7 @@
 fitok_users.json
 rebus_users.json
 start_users.json
+coming.json
+not_coming.json
 venv
 pycache/
