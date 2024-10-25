@@ -287,9 +287,9 @@ async def present_album_notification(bot: Bot):
             logging.info(f"Target time: {target_time}")
             for user_id in start_users:
                 try:
-                    logging.info(f"user id: {user_id}")
-                    # await bot.copy_message(chat_id=user_id, from_chat_id=from_chat_id, message_id=listening_album_id)
-                    # await bot.send_message(chat_id=user_id, text="Придешь?", reply_markup=keyboard)
+                    # logging.info(f"user id: {user_id}")
+                    await bot.copy_message(chat_id=user_id, from_chat_id=from_chat_id, message_id=listening_album_id)
+                    await bot.send_message(chat_id=user_id, text="Придешь?", reply_markup=keyboard)
                 except Exception as e:
                     logging.error(f"Failed to send message to {user_id}: {e}")
 
