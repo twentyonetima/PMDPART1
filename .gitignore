@@ -4,5 +4,7 @@ rebus_users.json
 start_users.json
 coming.json
 not_coming.json
+notification_status.json
+album_notification_status.json
 venv
 pycache/

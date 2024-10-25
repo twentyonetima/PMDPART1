@@ -39,6 +39,8 @@ REBUS_FILE = "rebus_users.json"
 FITOK_FILE = "fitok_users.json"
 COMING_FILE = "coming.json"
 NOT_COMING_FILE = "not_coming.json"
+NOTIFICATION_STATUS_FILE = "notification_status.json"
+ALBUM_NOTIFICATION_STATUS_FILE = "album_notification_status.json"
 
 rebus_user_list = []
 fitok_user_list = []
@@ -96,13 +98,27 @@ async def load_users_from_file():
             contents = await f.read()
             if contents.strip():
                 try:
+                    # Convert loaded JSON data to a set and return it
                     return set(json.loads(contents))
                 except json.JSONDecodeError:
                     logging.error(f"Error decoding JSON from {USER_FILE}. Returning an empty set.")
                     return set()
             else:
+                # Return an empty set if the file is empty
                 return set()
-    return set()
+    else:
+        # Create the file if it doesn't exist and return an empty set
+        async with aiofiles.open(USER_FILE, 'w') as f:
+            await f.write(json.dumps([]))
+        return set()
+
+async def periodic_reload_users():
+    global start_users
+    while True:
+        start_users = await load_users_from_file()
+        logging.info("User data reloaded")
+        await asyncio.sleep(30)
+
 
 async def load_rebus_users_from_file():
     if os.path.exists(REBUS_FILE):
@@ -117,6 +133,31 @@ async def load_rebus_users_from_file():
             else:
                 return set()
     return set()
+
+async def was_notification_sent():
+    if os.path.exists(NOTIFICATION_STATUS_FILE):
+        async with aiofiles.open(NOTIFICATION_STATUS_FILE, 'r') as f:
+            contents = await f.read()
+            if contents.strip() == "sent":
+                return True
+    return False
+
+async def mark_notification_as_sent():
+    async with aiofiles.open(NOTIFICATION_STATUS_FILE, 'w') as f:
+        await f.write("sent")
+
+async def was_album_notification_sent():
+    if os.path.exists(ALBUM_NOTIFICATION_STATUS_FILE):
+        async with aiofiles.open(ALBUM_NOTIFICATION_STATUS_FILE, 'r') as f:
+            contents = await f.read()
+            if contents.strip() == "sent":
+                return True
+    return False
+
+# Mark the album notification as sent
+async def mark_album_notification_as_sent():
+    async with aiofiles.open(ALBUM_NOTIFICATION_STATUS_FILE, 'w') as f:
+        await f.write("sent")
 
 async def rebus_func(message, user_id):
     global rebus_count
@@ -227,14 +268,18 @@ dp.callback_query.register(callback_handler, lambda call: call.data in ["coming"
 
 
 async def present_album_notification(bot: Bot):
-    target_time = convert(listening_album_date)
+    if await was_notification_sent():
+        logging.info("Notification already sent, skipping.")
+        return
 
+    target_time = convert(listening_album_date)
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="Да", callback_data="coming"),
             InlineKeyboardButton(text="Нет", callback_data="not_coming")
         ]
     ])
+
     while True:
         now = datetime.now()
         if now >= target_time:
@@ -244,10 +289,18 @@ async def present_album_notification(bot: Bot):
                     await bot.send_message(chat_id=user_id, text="Придешь?", reply_markup=keyboard)
                 except Exception as e:
                     logging.error(f"Failed to send message to {user_id}: {e}")
+
+            await mark_notification_as_sent()
             break
+
         await asyncio.sleep(60)
 
+
 async def album_notification(bot: Bot):
+    if await was_album_notification_sent():
+        logging.info("Album notification already sent, skipping.")
+        return
+
     target_time = convert(album_out_date)
 
     while True:
@@ -257,21 +310,23 @@ async def album_notification(bot: Bot):
                 try:
                     await bot.copy_message(chat_id=user_id, from_chat_id=from_chat_id, message_id=album_out_id)
                 except Exception as e:
-                    logging.error(f"Failed to send message to {user_id}: {e}")
+                    logging.error(f"Failed to send album message to {user_id}: {e}")
+
+            # Mark as sent after sending to all users
+            await mark_album_notification_as_sent()
             break
+
         await asyncio.sleep(60)
 
 
-async def main() -> None:
-    global start_users, coming_users, not_coming_users
-
+async def main():
+    global start_users
     start_users = await load_users_from_file()
-    coming_users = await load_coming_users_from_file()
-    not_coming_users = await load_not_coming_users_from_file()
+
+    asyncio.create_task(periodic_reload_users())
 
     asyncio.create_task(present_album_notification(bot))
     asyncio.create_task(album_notification(bot))
-
     await dp.start_polling(bot)
 
 
